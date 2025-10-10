@@ -1,5 +1,9 @@
 # TypoCompiler：当你把语言当作代码来运行时
 
+**语言 / Languages / 言語 / 언어 / Idiomas / Sprachen / Langues**：  
+[简体中文](./README.md) · [English](./README-en.md) · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · [Deutsch](./README-de.md) · [Français](./README-fr.md)
+
+
 > 外国人不是语法分析器，不会因为语法错误就报错不执行。所以我搞了个真正的语法分析器。
 
 你有没有想过，当你用蹩脚的外语交流时，对方的笑容背后是不是隐藏着一堆"编译错误"？现在，终于可以把你的日常对话当作一段程序来编译了！
