@@ -1,6 +1,6 @@
-
 # config_manager.py
 import json, os
+from copy import deepcopy
 from typing import Any, Dict
 
 APP_DIR = os.path.join(os.path.expanduser("~"), ".typocompiler")
@@ -32,7 +32,7 @@ class ConfigManager:
     def ensure_loaded(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         if not os.path.exists(self.path):
-            self._config = DEFAULT_CONFIG.copy()
+            self._config = deepcopy(DEFAULT_CONFIG)
             self.save()
             return
         try:
@@ -45,14 +45,14 @@ class ConfigManager:
                     os.replace(self.path, backup)
             except Exception:
                 pass
-            self._config = DEFAULT_CONFIG.copy()
+            self._config = deepcopy(DEFAULT_CONFIG)
             self.save()
         self._deep_merge_missing(self._config, DEFAULT_CONFIG)
 
     def _deep_merge_missing(self, target: Dict[str, Any], default: Dict[str, Any]) -> None:
         for k, v in default.items():
             if k not in target:
-                target[k] = v
+                target[k] = deepcopy(v)
             elif isinstance(v, dict) and isinstance(target[k], dict):
                 self._deep_merge_missing(target[k], v)
 
