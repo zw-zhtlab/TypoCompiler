@@ -1,4 +1,3 @@
-
 # llm_client.py
 import json
 from typing import List, Dict, Tuple
@@ -7,7 +6,6 @@ from config_manager import ConfigManager
 from styles import StyleManager, SUCCESS_SENTINEL
 
 class SafeDict(dict):
-    """format_map 的安全字典：未知键保持原样（含花括号），避免 KeyError"""
     def __missing__(self, key):
         return '{' + key + '}'
 
@@ -30,11 +28,20 @@ class LLMClient:
         return base.rstrip("/") + "/chat/completions"
 
     def _body(self, messages: List[Dict[str, str]]) -> Dict:
+        model = self.cfg.get_nested("llm", "model", default="gpt-4o-mini")
+        if not model:
+            model = "gpt-4o-mini"
+        temperature = self.cfg.get_nested("llm", "temperature", default=0.1)
+        if temperature is None:
+            temperature = 0.1
+        max_tokens = self.cfg.get_nested("llm", "max_tokens", default=900)
+        if max_tokens is None:
+            max_tokens = 900
         return {
-            "model": self.cfg.get_nested("llm", "model", default="gpt-4o-mini") or "gpt-4o-mini",
+            "model": model,
             "messages": messages,
-            "temperature": self.cfg.get_nested("llm", "temperature", default=0.1) or 0.1,
-            "max_tokens": self.cfg.get_nested("llm", "max_tokens", default=900) or 900,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
         }
 
     def test_connectivity(self) -> Tuple[bool, str]:
@@ -79,7 +86,9 @@ class LLMClient:
     def _request(self, messages: List[Dict[str, str]]) -> Tuple[bool, str]:
         data = json.dumps(self._body(messages)).encode("utf-8")
         req = urllib.request.Request(self._endpoint(), data=data, headers=self._headers(), method="POST")
-        timeout = self.cfg.get_nested("llm", "timeout_seconds", default=60) or 60
+        timeout = self.cfg.get_nested("llm", "timeout_seconds", default=60)
+        if timeout is None:
+            timeout = 60
         try:
             with urllib.request.urlopen(req, timeout=float(timeout)) as resp:
                 raw = resp.read().decode("utf-8", errors="ignore")
