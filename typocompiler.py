@@ -1,4 +1,3 @@
-
 # typocompiler.py
 import os
 import tkinter as tk
@@ -252,7 +251,6 @@ class TypoCompilerApp(tk.Tk):
             pass
         self.destroy()
 
-# --- Run Window & Settings/Styles dialogs ---
 import threading
 
 class RunWindow(tk.Toplevel):
@@ -261,7 +259,7 @@ class RunWindow(tk.Toplevel):
         self.cfg = cfg
         self.styles = styles
         self.llm = llm
-        self.input_text = input_text
+        self._initial_text = input_text
         self.title(t("run.window.title"))
         self.geometry("800x450")
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -298,14 +296,18 @@ class RunWindow(tk.Toplevel):
 
     def on_run(self):
         style = self.style_var.get()
-        if not self.input_text.strip():
+        if hasattr(self.master, "text"):
+            current_text = self.master.text.get("1.0", "end-1c")
+        else:
+            current_text = self._initial_text
+        if not (current_text or "").strip():
             messagebox.showwarning(APP_NAME, t("warn.no_text")); return
         if not style:
             messagebox.showwarning(APP_NAME, t("warn.no_style")); return
         self.status_var.set(t("run.running"))
         self.run_btn.configure(state="disabled")
         self.output.delete("1.0", "end")
-        threading.Thread(target=self._do_run, args=(style, self.input_text), daemon=True).start()
+        threading.Thread(target=self._do_run, args=(style, current_text), daemon=True).start()
 
     def _do_run(self, style: str, text: str):
         try:
@@ -317,6 +319,7 @@ class RunWindow(tk.Toplevel):
     def _update_output(self, text: str, err: Optional[str]):
         if err:
             messagebox.showerror(APP_NAME, t("msg.llm_failed", err=err))
+            self.status_var.set(t("run.ready"))
         else:
             self.output.insert("1.0", text)
             if (text or "").strip() == "":
