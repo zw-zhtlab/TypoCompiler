@@ -60,10 +60,13 @@ BUILTIN_STYLES: Dict[str, str] = {
 class StyleManager:
     def __init__(self, cfg: ConfigManager) -> None:
         self.cfg = cfg
+        self.reload()
+
+    def reload(self) -> None:
+        """Reload styles from built-ins plus user overrides."""
         self._styles = BUILTIN_STYLES.copy()
-        user_styles = cfg.get("styles", {}) or {}
-        for k, v in user_styles.items():
-            self._styles[k] = v
+        user_styles = self.cfg.get("styles", {}) or {}
+        self._styles.update(user_styles)
 
     @property
     def names(self) -> List[str]:
@@ -79,9 +82,11 @@ class StyleManager:
         self.cfg.set("styles", data)
 
     def delete(self, name: str) -> None:
-        if name in self._styles:
-            del self._styles[name]
         data = self.cfg.get("styles", {}) or {}
         if name in data:
             del data[name]
             self.cfg.set("styles", data)
+        if name not in BUILTIN_STYLES and name in self._styles:
+            del self._styles[name]
+        # Reload to restore built-ins and apply remaining overrides.
+        self.reload()

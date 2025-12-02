@@ -47,14 +47,19 @@ class ConfigManager:
                 pass
             self._config = deepcopy(DEFAULT_CONFIG)
             self.save()
-        self._deep_merge_missing(self._config, DEFAULT_CONFIG)
+        if self._deep_merge_missing(self._config, DEFAULT_CONFIG):
+            self.save()
 
-    def _deep_merge_missing(self, target: Dict[str, Any], default: Dict[str, Any]) -> None:
+    def _deep_merge_missing(self, target: Dict[str, Any], default: Dict[str, Any]) -> bool:
+        changed = False
         for k, v in default.items():
             if k not in target:
                 target[k] = deepcopy(v)
+                changed = True
             elif isinstance(v, dict) and isinstance(target[k], dict):
-                self._deep_merge_missing(target[k], v)
+                if self._deep_merge_missing(target[k], v):
+                    changed = True
+        return changed
 
     def get(self, key: str, default=None):
         return self._config.get(key, default)

@@ -26,9 +26,11 @@ class TypoCompilerApp(tk.Tk):
 
         self.current_file: Optional[str] = None
         self.font_size = int(self.cfg.get("font_size", 12))
+        self.dirty = False
 
         self.create_widgets()
         self.apply_font_size()
+        self.set_clean_state()
         self.update_title()
         self.status_var.set(t("status.ready"))
 
@@ -61,8 +63,7 @@ class TypoCompilerApp(tk.Tk):
 
         self.style_menu = tk.Menu(self.settings_menu, tearoff=0)
         self.default_style_var = tk.StringVar(value=self.cfg.get("default_style", "Python"))
-        for name in self.styles.names:
-            self.style_menu.add_radiobutton(label=name, value=name, variable=self.default_style_var, command=self.on_default_style_changed)
+        self.rebuild_style_menu()
         self.settings_menu.add_cascade(label=t("settings.default_style"), menu=self.style_menu)
         self.settings_menu.add_command(label=t("settings.manage_styles"), command=self.open_manage_styles)
 
@@ -87,6 +88,7 @@ class TypoCompilerApp(tk.Tk):
         # 编辑器
         self.text = tk.Text(self, wrap="word", undo=True)
         self.text.pack(fill="both", expand=True)
+        self.text.bind("<<Modified>>", self.on_text_modified)
 
         # 状态栏
         self.status_var = tk.StringVar(value="")
@@ -94,7 +96,7 @@ class TypoCompilerApp(tk.Tk):
         self.status.pack(side="bottom", fill="x")
 
     def on_lang_changed(self, lang: str):
-        self.title(t("app.title"))
+        self.update_title()
         self.menubar.delete(0, "end")
 
         self.file_menu = tk.Menu(self.menubar, tearoff=0)
@@ -116,8 +118,7 @@ class TypoCompilerApp(tk.Tk):
         self.settings_menu.add_cascade(label=t("settings.language"), menu=self.lang_menu)
 
         self.style_menu = tk.Menu(self.settings_menu, tearoff=0)
-        for name in self.styles.names:
-            self.style_menu.add_radiobutton(label=name, value=name, variable=self.default_style_var, command=self.on_default_style_changed)
+        self.rebuild_style_menu()
         self.settings_menu.add_cascade(label=t("settings.default_style"), menu=self.style_menu)
         self.settings_menu.add_command(label=t("settings.manage_styles"), command=self.open_manage_styles)
 
@@ -137,10 +138,7 @@ class TypoCompilerApp(tk.Tk):
         self.run_menu.add_command(label=t("run.open"), command=self.open_run_window)
         self.menubar.add_cascade(label=t("menu.run"), menu=self.run_menu)
 
-        if self.current_file:
-            self.status_var.set(t("status.loaded", name=os.path.basename(self.current_file)))
-        else:
-            self.status_var.set(t("status.ready"))
+        self._set_ready_status()
 
     def refresh_recent_files_menu(self):
         self.recent_menu.delete(0, "end")
@@ -160,18 +158,48 @@ class TypoCompilerApp(tk.Tk):
         style = self.default_style_var.get()
         self.cfg.set("default_style", style)
 
+    def rebuild_style_menu(self):
+        self.style_menu.delete(0, "end")
+        for name in self.styles.names:
+            self.style_menu.add_radiobutton(label=name, value=name, variable=self.default_style_var, command=self.on_default_style_changed)
+
+    def on_styles_changed(self):
+        self.styles.reload()
+        current = self.default_style_var.get()
+        if current not in self.styles.names:
+            fallback = self.styles.names[0] if self.styles.names else ""
+            if fallback:
+                self.default_style_var.set(fallback)
+                self.cfg.set("default_style", fallback)
+        self.rebuild_style_menu()
+
     def open_manage_styles(self):
-        StylesDialog(self, self.styles, self.cfg)
+        StylesDialog(self, self.styles, self.cfg, on_changed=self.on_styles_changed)
 
     def open_llm_settings(self):
         LLMSettingsDialog(self, self.cfg, self.llm)
 
     def test_llm(self):
-        ok, msg = self.llm.test_connectivity()
+        if getattr(self, "_testing_llm", False):
+            return
+        self._testing_llm = True
+        self.status_var.set(t("status.testing_llm"))
+        threading.Thread(target=self._do_test_llm, daemon=True).start()
+
+    def _do_test_llm(self):
+        try:
+            ok, msg = self.llm.test_connectivity()
+        except Exception as e:
+            ok, msg = False, str(e)
+        self.after(0, lambda: self._finish_test_llm(ok, msg))
+
+    def _finish_test_llm(self, ok: bool, msg: str):
+        self._testing_llm = False
         if ok:
             messagebox.showinfo(APP_NAME, t("msg.llm_test_ok"))
         else:
             messagebox.showerror(APP_NAME, t("msg.llm_test_fail", err=msg))
+        self._set_ready_status()
 
     def adjust_font(self, delta: int):
         self.font_size = max(8, min(40, self.font_size + delta))
@@ -191,21 +219,54 @@ class TypoCompilerApp(tk.Tk):
         base = t("app.title")
         if self.current_file:
             base += f" - {os.path.basename(self.current_file)}"
+        if self.dirty:
+            base += " *"
         self.title(base)
 
+    def set_clean_state(self):
+        self.dirty = False
+        try:
+            self.text.edit_modified(False)
+        except Exception:
+            pass
+
+    def on_text_modified(self, evt=None):
+        if self.text.edit_modified():
+            self.dirty = True
+            self.update_title()
+            self.text.edit_modified(False)
+
+    def confirm_discard(self) -> bool:
+        if not self.dirty:
+            return True
+        return messagebox.askyesno(APP_NAME, t("warn.unsaved"))
+
+    def _set_ready_status(self):
+        if self.current_file:
+            self.status_var.set(t("status.loaded", name=os.path.basename(self.current_file)))
+        else:
+            self.status_var.set(t("status.ready"))
+
     def new_file(self):
+        if not self.confirm_discard():
+            return
         self.text.delete("1.0", "end")
         self.current_file = None
+        self.set_clean_state()
         self.update_title()
         self.status_var.set(t("status.ready"))
 
     def open_file(self):
+        if not self.confirm_discard():
+            return
         path = filedialog.askopenfilename(filetypes=[("Text", "*.txt"), ("All", "*.*")])
         if not path:
             return
         self.open_file_from_path(path)
 
     def open_file_from_path(self, path: str):
+        if not self.confirm_discard():
+            return
         try:
             content = read_text_utf8(path)
             self.text.delete("1.0", "end")
@@ -213,6 +274,7 @@ class TypoCompilerApp(tk.Tk):
             self.current_file = path
             self.cfg.add_recent_file(path)
             self.refresh_recent_files_menu()
+            self.set_clean_state()
             self.update_title()
             self.status_var.set(t("status.loaded", name=os.path.basename(path)))
         except Exception as e:
@@ -223,6 +285,8 @@ class TypoCompilerApp(tk.Tk):
             return self.save_file_as()
         try:
             write_text_utf8(self.current_file, self.text.get("1.0", "end-1c"))
+            self.set_clean_state()
+            self.update_title()
             self.status_var.set(t("status.saved", name=os.path.basename(self.current_file)))
         except Exception as e:
             messagebox.showerror(APP_NAME, t("msg.save_failed", err=str(e)))
@@ -236,6 +300,7 @@ class TypoCompilerApp(tk.Tk):
             self.current_file = path
             self.cfg.add_recent_file(path)
             self.refresh_recent_files_menu()
+            self.set_clean_state()
             self.update_title()
             self.status_var.set(t("status.saved", name=os.path.basename(path)))
         except Exception as e:
@@ -245,6 +310,8 @@ class TypoCompilerApp(tk.Tk):
         RunWindow(self, self.cfg, self.styles, self.llm, self.text.get("1.0", "end-1c"))
 
     def on_close(self):
+        if not self.confirm_discard():
+            return
         try:
             unregister_listener(self.on_lang_changed)
         except Exception:
@@ -358,14 +425,14 @@ class LLMSettingsDialog(tk.Toplevel):
         self.title(t("llm.title")); self.resizable(False, False)
         pad = {"padx":8, "pady":4}; frm = ttk.Frame(self); frm.pack(fill="both", expand=True, **pad)
 
-        self.base_url = tk.StringVar(value=cfg.get_nested("llm", "base_url"))
-        self.model = tk.StringVar(value=cfg.get_nested("llm", "model"))
-        self.api_key = tk.StringVar(value=cfg.get_nested("llm", "api_key"))
-        self.header_name = tk.StringVar(value=cfg.get_nested("llm", "auth", "header_name"))
-        self.header_prefix = tk.StringVar(value=cfg.get_nested("llm", "auth", "prefix"))
-        self.temperature = tk.DoubleVar(value=float(cfg.get_nested("llm", "temperature")))
-        self.max_tokens = tk.IntVar(value=int(cfg.get_nested("llm", "max_tokens")))
-        self.timeout = tk.IntVar(value=int(cfg.get_nested("llm", "timeout_seconds")))
+        self.base_url = tk.StringVar(value=cfg.get_nested("llm", "base_url") or "")
+        self.model = tk.StringVar(value=cfg.get_nested("llm", "model") or "")
+        self.api_key = tk.StringVar(value=cfg.get_nested("llm", "api_key") or "")
+        self.header_name = tk.StringVar(value=cfg.get_nested("llm", "auth", "header_name") or "")
+        self.header_prefix = tk.StringVar(value=cfg.get_nested("llm", "auth", "prefix") or "")
+        self.temperature = tk.DoubleVar(value=self._safe_float(cfg.get_nested("llm", "temperature"), 0.1))
+        self.max_tokens = tk.IntVar(value=self._safe_int(cfg.get_nested("llm", "max_tokens"), 900))
+        self.timeout = tk.IntVar(value=self._safe_int(cfg.get_nested("llm", "timeout_seconds"), 60))
 
         row=0
         self.lbl_base=ttk.Label(frm,text=t("llm.base_url")); self.lbl_base.grid(row=row,column=0,sticky="e",**pad); ttk.Entry(frm,textvariable=self.base_url,width=50).grid(row=row,column=1,**pad); row+=1
@@ -377,12 +444,29 @@ class LLMSettingsDialog(tk.Toplevel):
         self.lbl_max=ttk.Label(frm,text=t("llm.max_tokens")); self.lbl_max.grid(row=row,column=0,sticky="e",**pad); ttk.Entry(frm,textvariable=self.max_tokens,width=10).grid(row=row,column=1,sticky="w",**pad); row+=1
         self.lbl_timeout=ttk.Label(frm,text=t("llm.timeout")); self.lbl_timeout.grid(row=row,column=0,sticky="e",**pad); ttk.Entry(frm,textvariable=self.timeout,width=10).grid(row=row,column=1,sticky="w",**pad); row+=1
 
+        self.security_note = ttk.Label(frm, text=t("llm.security_note"), foreground="red", wraplength=420)
+        self.security_note.grid(row=row, column=0, columnspan=2, sticky="w", **pad); row+=1
+
         btns = ttk.Frame(frm); btns.grid(row=row, column=0, columnspan=2, sticky="e", **pad)
         self.btn_save=ttk.Button(btns,text=t("styles.save"),command=self.on_save); self.btn_save.pack(side="right",padx=4)
         self.btn_test=ttk.Button(btns,text=t("settings.test_llm"),command=self.on_test); self.btn_test.pack(side="right",padx=4)
         self.btn_close=ttk.Button(btns,text=t("styles.close"),command=self.destroy); self.btn_close.pack(side="right",padx=4)
 
         register_listener(self.on_lang_changed)
+
+    @staticmethod
+    def _safe_float(value, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _safe_int(value, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
     def on_lang_changed(self, lang: str):
         self.title(t("llm.title"))
@@ -394,6 +478,7 @@ class LLMSettingsDialog(tk.Toplevel):
         self.lbl_temp.configure(text=t("llm.temperature"))
         self.lbl_max.configure(text=t("llm.max_tokens"))
         self.lbl_timeout.configure(text=t("llm.timeout"))
+        self.security_note.configure(text=t("llm.security_note"))
         self.btn_save.configure(text=t("styles.save"))
         self.btn_test.configure(text=t("settings.test_llm"))
         self.btn_close.configure(text=t("styles.close"))
@@ -413,7 +498,22 @@ class LLMSettingsDialog(tk.Toplevel):
             messagebox.showerror(APP_NAME, t("msg.config_failed", err=str(e)))
 
     def on_test(self):
-        ok, msg = self.llm.test_connectivity()
+        if getattr(self, "_testing", False):
+            return
+        self._testing = True
+        self.btn_test.configure(state="disabled")
+        threading.Thread(target=self._do_test, daemon=True).start()
+
+    def _do_test(self):
+        try:
+            ok, msg = self.llm.test_connectivity()
+        except Exception as e:
+            ok, msg = False, str(e)
+        self.after(0, lambda: self._finish_test(ok, msg))
+
+    def _finish_test(self, ok: bool, msg: str):
+        self._testing = False
+        self.btn_test.configure(state="normal")
         if ok: messagebox.showinfo(APP_NAME, t("msg.llm_test_ok"))
         else: messagebox.showerror(APP_NAME, t("msg.llm_test_fail", err=msg))
 
@@ -423,9 +523,9 @@ class LLMSettingsDialog(tk.Toplevel):
         super().destroy()
 
 class StylesDialog(tk.Toplevel):
-    def __init__(self, master, styles: StyleManager, cfg: ConfigManager):
+    def __init__(self, master, styles: StyleManager, cfg: ConfigManager, on_changed=None):
         super().__init__(master)
-        self.styles = styles; self.cfg = cfg
+        self.styles = styles; self.cfg = cfg; self._on_changed = on_changed
         self.title(t("styles.title")); self.geometry("700x500")
 
         container = ttk.Frame(self); container.pack(fill="both", expand=True, padx=8, pady=8)
@@ -475,7 +575,14 @@ class StylesDialog(tk.Toplevel):
         self.template.insert("1.0", "STRICT compiler-style diagnostics for ENGLISH text; success => __TC_OK__.\nINPUT:\n{input_text}")
 
     def on_edit(self):
-        pass
+        name = self._selected_name()
+        if not name:
+            messagebox.showwarning(APP_NAME, t("warn.no_style"))
+            return
+        self.name_var.set(name)
+        self.template.delete("1.0","end")
+        self.template.insert("1.0", self.styles.get(name))
+        self.template.focus_set()
 
     def on_delete(self):
         name = self._selected_name()
@@ -484,10 +591,10 @@ class StylesDialog(tk.Toplevel):
             data = self.cfg.get("styles", {}) or {}
             if name in data:
                 del data[name]; self.cfg.set("styles", data)
-            self.styles = StyleManager(self.cfg)
         else:
             self.styles.delete(name)
         self.refresh_list()
+        self._notify_styles_changed()
 
     def on_save(self):
         name = (self.name_var.get() or "").strip()
@@ -495,11 +602,19 @@ class StylesDialog(tk.Toplevel):
         template = self.template.get("1.0","end-1c")
         self.styles.set(name, template)
         self.refresh_list()
+        self._notify_styles_changed()
 
     def refresh_list(self):
-        self.styles = StyleManager(self.cfg)
+        self.styles.reload()
         self.listbox.delete(0,"end")
         for n in self.styles.names: self.listbox.insert("end", n)
+
+    def _notify_styles_changed(self):
+        if self._on_changed:
+            try:
+                self._on_changed()
+            except Exception:
+                pass
 
     def _selected_name(self) -> Optional[str]:
         sel = self.listbox.curselection()

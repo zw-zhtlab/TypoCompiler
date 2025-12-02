@@ -1,4 +1,3 @@
-
 # i18n.py
 from typing import Callable, Dict, List
 
@@ -43,6 +42,7 @@ DICT: Dict[str, Dict[str, str]] = {
         "status.ready": "Ready",
         "status.loaded": "Loaded: {name}",
         "status.saved": "Saved: {name}",
+        "status.testing_llm": "Testing LLM connectivity...",
         "msg.confirm_overwrite": "File exists. Overwrite?",
         "msg.save_failed": "Save failed: {err}",
         "msg.open_failed": "Open failed: {err}",
@@ -60,6 +60,7 @@ DICT: Dict[str, Dict[str, str]] = {
         "llm.temperature": "Temperature",
         "llm.max_tokens": "Max Tokens",
         "llm.timeout": "Timeout (seconds)",
+        "llm.security_note": "Note: API keys are stored locally in plain text. Prefer using a scoped token.",
         "styles.title": "Manage Styles",
         "styles.name": "Name",
         "styles.template": "Template",
@@ -71,6 +72,7 @@ DICT: Dict[str, Dict[str, str]] = {
         "styles.example_hint": "Template placeholders: {input_text}, {style_name}",
         "warn.no_text": "Please enter English natural-language text to 'compile'.",
         "warn.no_style": "No style selected.",
+        "warn.unsaved": "You have unsaved changes. Discard them?",
         "warn.save_log_failed": "Failed to save log: {err}",
         "warn.copy_ok": "Copied to clipboard.",
         "warn.copy_failed": "Copy failed: {err}",
@@ -87,13 +89,13 @@ DICT: Dict[str, Dict[str, str]] = {
         "file.save_as": "另存为...",
         "file.recent": "最近打开",
         "file.exit": "退出",
-        "recent.empty": "(空)",
+        "recent.empty": "（空）",
         "settings.language": "界面语言",
         "settings.lang.zh": "中文",
         "settings.lang.en": "英文",
         "settings.default_style": "默认报错风格",
         "settings.manage_styles": "管理风格...",
-        "settings.llm": "LLM设置...",
+        "settings.llm": "LLM 设置...",
         "settings.test_llm": "测试连通性",
         "settings.font": "字号",
         "settings.font.inc": "增大",
@@ -116,6 +118,7 @@ DICT: Dict[str, Dict[str, str]] = {
         "status.ready": "就绪",
         "status.loaded": "已打开：{name}",
         "status.saved": "已保存：{name}",
+        "status.testing_llm": "正在测试 LLM 连通性...",
         "msg.confirm_overwrite": "文件已存在，是否覆盖？",
         "msg.save_failed": "保存失败：{err}",
         "msg.open_failed": "打开失败：{err}",
@@ -126,13 +129,14 @@ DICT: Dict[str, Dict[str, str]] = {
         "msg.llm_failed": "LLM 请求失败：\n{err}",
         "llm.title": "LLM 设置",
         "llm.base_url": "基础地址（OpenAI 协议）",
-        "llm.model": "模型名",
+        "llm.model": "模型",
         "llm.api_key": "API Key / Token",
         "llm.header_name": "鉴权头名称",
         "llm.header_prefix": "鉴权头前缀",
         "llm.temperature": "温度",
-        "llm.max_tokens": "最大Token",
+        "llm.max_tokens": "最大 Token",
         "llm.timeout": "超时（秒）",
+        "llm.security_note": "提示：API Key 将以明文保存在本地，请尽量使用权限受限的 Token。",
         "styles.title": "风格管理",
         "styles.name": "名称",
         "styles.template": "模板",
@@ -144,6 +148,7 @@ DICT: Dict[str, Dict[str, str]] = {
         "styles.example_hint": "模板可用占位符：{input_text}、{style_name}",
         "warn.no_text": "请输入要“编译”的英文自然语言文本。",
         "warn.no_style": "请选择风格。",
+        "warn.unsaved": "当前内容尚未保存，确定要放弃更改吗？",
         "warn.save_log_failed": "保存日志失败：{err}",
         "warn.copy_ok": "已复制到剪贴板。",
         "warn.copy_failed": "复制失败：{err}",
@@ -153,6 +158,7 @@ DICT: Dict[str, Dict[str, str]] = {
 
 _current_lang: str = "zh"
 _listeners: List[Callable[[str], None]] = []
+
 
 def set_language(lang: str) -> None:
     global _current_lang
@@ -165,8 +171,10 @@ def set_language(lang: str) -> None:
         except Exception:
             pass
 
+
 def get_language() -> str:
     return _current_lang
+
 
 def t(key: str, **kwargs) -> str:
     d = DICT.get(_current_lang, {})
@@ -178,9 +186,11 @@ def t(key: str, **kwargs) -> str:
             return text
     return text
 
+
 def register_listener(callback: Callable[[str], None]) -> None:
     if callback not in _listeners:
         _listeners.append(callback)
+
 
 def unregister_listener(callback: Callable[[str], None]) -> None:
     if callback in _listeners:
