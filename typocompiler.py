@@ -172,6 +172,12 @@ class TypoCompilerApp(tk.Tk):
                 self.default_style_var.set(fallback)
                 self.cfg.set("default_style", fallback)
         self.rebuild_style_menu()
+        for child in self.winfo_children():
+            if isinstance(child, RunWindow):
+                try:
+                    child.refresh_styles()
+                except Exception:
+                    pass
 
     def open_manage_styles(self):
         StylesDialog(self, self.styles, self.cfg, on_changed=self.on_styles_changed)
@@ -257,8 +263,6 @@ class TypoCompilerApp(tk.Tk):
         self.status_var.set(t("status.ready"))
 
     def open_file(self):
-        if not self.confirm_discard():
-            return
         path = filedialog.askopenfilename(filetypes=[("Text", "*.txt"), ("All", "*.*")])
         if not path:
             return
@@ -347,11 +351,22 @@ class RunWindow(tk.Toplevel):
         self.output.configure(font=("TkFixedFont", max(10, int(master.font_size))))
         self.output.pack(fill="both", expand=True, padx=8, pady=(0,8))
 
+        self.refresh_styles()
         register_listener(self.on_lang_changed)
+
+    def refresh_styles(self):
+        values = self.styles.names
+        self.style_box["values"] = values
+        current = self.style_var.get()
+        if current not in values:
+            fallback = self.cfg.get("default_style", "")
+            if fallback not in values:
+                fallback = values[0] if values else ""
+            self.style_var.set(fallback)
 
     def on_lang_changed(self, lang: str):
         self.title(t("run.window.title"))
-        self.style_box["values"] = self.styles.names
+        self.refresh_styles()
         self.run_btn.configure(text=t("run.run"))
         self.copy_btn.configure(text=t("run.copy"))
         self.save_btn.configure(text=t("run.save_log"))
