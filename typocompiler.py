@@ -20,12 +20,19 @@ class TypoCompilerApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.cfg = ConfigManager()
-        set_language(self.cfg.get("language", "zh"))
+        raw_lang = self.cfg.get("language", "zh")
+        set_language(raw_lang)
+        effective_lang = get_language()
+        if effective_lang != raw_lang:
+            self.cfg.set("language", effective_lang)
         self.styles = StyleManager(self.cfg)
         self.llm = LLMClient(self.cfg, self.styles)
 
         self.current_file: Optional[str] = None
-        self.font_size = int(self.cfg.get("font_size", 12))
+        raw_font_size = self.cfg.get("font_size", 12)
+        self.font_size = self._normalize_font_size(raw_font_size)
+        if raw_font_size != self.font_size:
+            self.cfg.set("font_size", self.font_size)
         self.dirty = False
 
         self.create_widgets()
@@ -35,6 +42,17 @@ class TypoCompilerApp(tk.Tk):
         self.status_var.set(t("status.ready"))
 
         register_listener(self.on_lang_changed)
+
+        if self.cfg.consume_reset_notice():
+            messagebox.showinfo(APP_NAME, t("info.reset_defaults"))
+
+    @staticmethod
+    def _normalize_font_size(value) -> int:
+        try:
+            size = int(value)
+        except (TypeError, ValueError):
+            size = 12
+        return max(8, min(40, size))
 
     def create_widgets(self):
         self.menubar = tk.Menu(self)
@@ -56,7 +74,7 @@ class TypoCompilerApp(tk.Tk):
         # Settings
         self.settings_menu = tk.Menu(self.menubar, tearoff=0)
         self.lang_menu = tk.Menu(self.settings_menu, tearoff=0)
-        self.lang_var = tk.StringVar(value=self.cfg.get("language", "zh"))
+        self.lang_var = tk.StringVar(value=get_language())
         self.lang_menu.add_radiobutton(label=t("settings.lang.zh"), value="zh", variable=self.lang_var, command=self.change_language)
         self.lang_menu.add_radiobutton(label=t("settings.lang.en"), value="en", variable=self.lang_var, command=self.change_language)
         self.settings_menu.add_cascade(label=t("settings.language"), menu=self.lang_menu)
@@ -336,7 +354,8 @@ class RunWindow(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         top = ttk.Frame(self); top.pack(side="top", fill="x", padx=8, pady=6)
-        ttk.Label(top, text=t("run.choose_style")).pack(side="left")
+        self.choose_style_label = ttk.Label(top, text=t("run.choose_style"))
+        self.choose_style_label.pack(side="left")
         self.style_var = tk.StringVar(value=self.cfg.get("default_style", "Python"))
         self.style_box = ttk.Combobox(top, textvariable=self.style_var, state="readonly", values=self.styles.names, width=20); self.style_box.pack(side="left", padx=6)
         self.run_btn = ttk.Button(top, text=t("run.run"), command=self.on_run); self.run_btn.pack(side="left", padx=6)
@@ -367,6 +386,7 @@ class RunWindow(tk.Toplevel):
     def on_lang_changed(self, lang: str):
         self.title(t("run.window.title"))
         self.refresh_styles()
+        self.choose_style_label.configure(text=t("run.choose_style"))
         self.run_btn.configure(text=t("run.run"))
         self.copy_btn.configure(text=t("run.copy"))
         self.save_btn.configure(text=t("run.save_log"))
@@ -483,6 +503,29 @@ class LLMSettingsDialog(tk.Toplevel):
         except (TypeError, ValueError):
             return default
 
+    def _build_llm_overrides(self):
+        try:
+            temperature = float(self.temperature.get())
+            max_tokens = int(self.max_tokens.get())
+            timeout = int(self.timeout.get())
+        except Exception as e:
+            messagebox.showerror(APP_NAME, t("msg.config_failed", err=str(e)))
+            return None
+        return {
+            "llm": {
+                "base_url": self.base_url.get().strip(),
+                "model": self.model.get().strip(),
+                "api_key": self.api_key.get().strip(),
+                "auth": {
+                    "header_name": self.header_name.get().strip(),
+                    "prefix": self.header_prefix.get(),
+                },
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "timeout_seconds": timeout,
+            }
+        }
+
     def on_lang_changed(self, lang: str):
         self.title(t("llm.title"))
         self.lbl_base.configure(text=t("llm.base_url"))
@@ -515,13 +558,16 @@ class LLMSettingsDialog(tk.Toplevel):
     def on_test(self):
         if getattr(self, "_testing", False):
             return
+        overrides = self._build_llm_overrides()
+        if overrides is None:
+            return
         self._testing = True
         self.btn_test.configure(state="disabled")
-        threading.Thread(target=self._do_test, daemon=True).start()
+        threading.Thread(target=self._do_test, args=(overrides,), daemon=True).start()
 
-    def _do_test(self):
+    def _do_test(self, overrides):
         try:
-            ok, msg = self.llm.test_connectivity()
+            ok, msg = self.llm.test_connectivity(overrides=overrides)
         except Exception as e:
             ok, msg = False, str(e)
         self.after(0, lambda: self._finish_test(ok, msg))

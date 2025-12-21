@@ -1,6 +1,6 @@
 # llm_client.py
 import json
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional, Any
 import urllib.request, urllib.error
 from config_manager import ConfigManager
 from styles import StyleManager, SUCCESS_SENTINEL
@@ -14,27 +14,38 @@ class LLMClient:
         self.cfg = cfg
         self.styles = style_manager
 
-    def _headers(self) -> Dict[str, str]:
-        api_key = self.cfg.get_nested("llm", "api_key", default="")
-        header_name = self.cfg.get_nested("llm", "auth", "header_name", default="Authorization") or "Authorization"
-        prefix = self.cfg.get_nested("llm", "auth", "prefix", default="Bearer ") or ""
+    def _get_cfg(self, overrides: Optional[Dict[str, Any]], *keys, default=None):
+        if overrides is not None:
+            node = overrides
+            for k in keys:
+                if not isinstance(node, dict) or k not in node:
+                    break
+                node = node[k]
+            else:
+                return node
+        return self.cfg.get_nested(*keys, default=default)
+
+    def _headers(self, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+        api_key = self._get_cfg(overrides, "llm", "api_key", default="")
+        header_name = self._get_cfg(overrides, "llm", "auth", "header_name", default="Authorization") or "Authorization"
+        prefix = self._get_cfg(overrides, "llm", "auth", "prefix", default="Bearer ") or ""
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers[header_name] = f"{prefix}{api_key}"
         return headers
 
-    def _endpoint(self) -> str:
-        base = self.cfg.get_nested("llm", "base_url", default="https://api.openai.com/v1") or "https://api.openai.com/v1"
+    def _endpoint(self, overrides: Optional[Dict[str, Any]] = None) -> str:
+        base = self._get_cfg(overrides, "llm", "base_url", default="https://api.openai.com/v1") or "https://api.openai.com/v1"
         return base.rstrip("/") + "/chat/completions"
 
-    def _body(self, messages: List[Dict[str, str]]) -> Dict:
-        model = self.cfg.get_nested("llm", "model", default="gpt-4o-mini")
+    def _body(self, messages: List[Dict[str, str]], overrides: Optional[Dict[str, Any]] = None) -> Dict:
+        model = self._get_cfg(overrides, "llm", "model", default="gpt-4o-mini")
         if not model:
             model = "gpt-4o-mini"
-        temperature = self.cfg.get_nested("llm", "temperature", default=0.1)
+        temperature = self._get_cfg(overrides, "llm", "temperature", default=0.1)
         if temperature is None:
             temperature = 0.1
-        max_tokens = self.cfg.get_nested("llm", "max_tokens", default=900)
+        max_tokens = self._get_cfg(overrides, "llm", "max_tokens", default=900)
         if max_tokens is None:
             max_tokens = 900
         return {
@@ -44,13 +55,13 @@ class LLMClient:
             "max_tokens": max_tokens,
         }
 
-    def test_connectivity(self) -> Tuple[bool, str]:
+    def test_connectivity(self, overrides: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
         messages = [
             {"role": "system", "content": "Reply with a single word: pong"},
             {"role": "user", "content": "ping"},
         ]
         try:
-            ok, text = self._request(messages)
+            ok, text = self._request(messages, overrides=overrides)
             if not ok:
                 return False, text
             return (text.strip().lower() == "pong"), text
@@ -83,10 +94,10 @@ class LLMClient:
             return ""
         return content
 
-    def _request(self, messages: List[Dict[str, str]]) -> Tuple[bool, str]:
-        data = json.dumps(self._body(messages)).encode("utf-8")
-        req = urllib.request.Request(self._endpoint(), data=data, headers=self._headers(), method="POST")
-        timeout = self.cfg.get_nested("llm", "timeout_seconds", default=60)
+    def _request(self, messages: List[Dict[str, str]], overrides: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+        data = json.dumps(self._body(messages, overrides=overrides)).encode("utf-8")
+        req = urllib.request.Request(self._endpoint(overrides), data=data, headers=self._headers(overrides), method="POST")
+        timeout = self._get_cfg(overrides, "llm", "timeout_seconds", default=60)
         if timeout is None:
             timeout = 60
         try:

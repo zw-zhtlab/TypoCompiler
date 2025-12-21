@@ -27,6 +27,7 @@ class ConfigManager:
     def __init__(self, path: str = CONFIG_PATH) -> None:
         self.path = path
         self._config = None
+        self._reset_notice = False
         self.ensure_loaded()
 
     def ensure_loaded(self) -> None:
@@ -39,6 +40,7 @@ class ConfigManager:
             with open(self.path, "r", encoding="utf-8") as f:
                 self._config = json.load(f)
         except Exception:
+            self._reset_notice = True
             try:
                 backup = self.path + ".broken"
                 if os.path.exists(self.path):
@@ -93,6 +95,12 @@ class ConfigManager:
         lst.insert(0, path)
         self._config["recent_files"] = lst[:10]
         self.save()
+
+    def consume_reset_notice(self) -> bool:
+        if self._reset_notice:
+            self._reset_notice = False
+            return True
+        return False
 
     def save(self) -> None:
         with open(self.path, "w", encoding="utf-8") as f:
