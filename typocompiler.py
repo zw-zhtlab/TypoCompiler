@@ -5,7 +5,14 @@ from tkinter import ttk, filedialog, messagebox
 from typing import Optional
 
 from config_manager import ConfigManager
-from i18n import t, set_language, get_language, register_listener, unregister_listener
+from i18n import (
+    t,
+    set_language,
+    get_language,
+    register_listener,
+    unregister_listener,
+    get_supported_languages,
+)
 from styles import StyleManager, BUILTIN_STYLES
 from llm_client import LLMClient
 from file_ops import read_text_utf8, write_text_utf8
@@ -75,8 +82,7 @@ class TypoCompilerApp(tk.Tk):
         self.settings_menu = tk.Menu(self.menubar, tearoff=0)
         self.lang_menu = tk.Menu(self.settings_menu, tearoff=0)
         self.lang_var = tk.StringVar(value=get_language())
-        self.lang_menu.add_radiobutton(label=t("settings.lang.zh"), value="zh", variable=self.lang_var, command=self.change_language)
-        self.lang_menu.add_radiobutton(label=t("settings.lang.en"), value="en", variable=self.lang_var, command=self.change_language)
+        self.rebuild_language_menu()
         self.settings_menu.add_cascade(label=t("settings.language"), menu=self.lang_menu)
 
         self.style_menu = tk.Menu(self.settings_menu, tearoff=0)
@@ -114,6 +120,7 @@ class TypoCompilerApp(tk.Tk):
         self.status.pack(side="bottom", fill="x")
 
     def on_lang_changed(self, lang: str):
+        self.lang_var.set(lang)
         self.update_title()
         self.menubar.delete(0, "end")
 
@@ -131,8 +138,7 @@ class TypoCompilerApp(tk.Tk):
 
         self.settings_menu = tk.Menu(self.menubar, tearoff=0)
         self.lang_menu = tk.Menu(self.settings_menu, tearoff=0)
-        self.lang_menu.add_radiobutton(label=t("settings.lang.zh"), value="zh", variable=self.lang_var, command=self.change_language)
-        self.lang_menu.add_radiobutton(label=t("settings.lang.en"), value="en", variable=self.lang_var, command=self.change_language)
+        self.rebuild_language_menu()
         self.settings_menu.add_cascade(label=t("settings.language"), menu=self.lang_menu)
 
         self.style_menu = tk.Menu(self.settings_menu, tearoff=0)
@@ -171,6 +177,16 @@ class TypoCompilerApp(tk.Tk):
         lang = self.lang_var.get()
         set_language(lang)
         self.cfg.set("language", lang)
+
+    def rebuild_language_menu(self):
+        self.lang_menu.delete(0, "end")
+        for code in get_supported_languages():
+            self.lang_menu.add_radiobutton(
+                label=t(f"settings.lang.{code}"),
+                value=code,
+                variable=self.lang_var,
+                command=self.change_language,
+            )
 
     def on_default_style_changed(self):
         style = self.default_style_var.get()
