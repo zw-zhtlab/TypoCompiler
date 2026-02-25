@@ -52,7 +52,7 @@ python typocompiler.py
 * **Java-Stil**: Fehlerzusammenfassung – die klassische Standpauke.
 * **C++-Stil**: Genauigkeit bis zum Zeichen – der klassische Seitenhieb.
 
-Gibt das Modell `TC_OK` zurück, Glückwunsch. Zumindest diesmal hast du die KI ausgetrickst.
+Gibt das Modell `__TC_OK__` zurück, Glückwunsch. Zumindest diesmal hast du die KI ausgetrickst.
 
 ---
 

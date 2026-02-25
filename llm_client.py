@@ -55,6 +55,20 @@ class LLMClient:
             "max_tokens": max_tokens,
         }
 
+    @staticmethod
+    def _normalize_token(text: str) -> str:
+        token = (text or "").strip()
+        token = token.strip("`'\"")
+        token = token.rstrip(".!;:,")
+        return token.strip().upper()
+
+    def _is_connectivity_pong(self, text: str) -> bool:
+        return self._normalize_token(text) == "PONG"
+
+    def _is_success_sentinel(self, text: str) -> bool:
+        token = self._normalize_token(text)
+        return token in {SUCCESS_SENTINEL.upper(), "TC_OK"}
+
     def test_connectivity(self, overrides: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
         messages = [
             {"role": "system", "content": "Reply with a single word: pong"},
@@ -64,7 +78,7 @@ class LLMClient:
             ok, text = self._request(messages, overrides=overrides)
             if not ok:
                 return False, text
-            return (text.strip().lower() == "pong"), text
+            return self._is_connectivity_pong(text), text
         except Exception as e:
             return False, str(e)
 
@@ -90,7 +104,7 @@ class LLMClient:
             c = content.strip("`")
             parts = c.split("\n", 1)
             content = (parts[1] if len(parts) > 1 else "").strip()
-        if content == SUCCESS_SENTINEL:
+        if self._is_success_sentinel(content):
             return ""
         return content
 

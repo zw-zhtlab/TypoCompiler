@@ -52,7 +52,7 @@ python typocompiler.py
 * **Style Java** : résumé d’erreurs, la remontrance classique.
 * **Style C++** : précision au caractère, la petite pique classique.
 
-Si le modèle renvoie `TC_OK`, bravo. Au moins cette fois tu as dupé l’IA.
+Si le modèle renvoie `__TC_OK__`, bravo. Au moins cette fois tu as dupé l’IA.
 
 ---
 

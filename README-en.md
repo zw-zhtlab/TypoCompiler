@@ -52,7 +52,7 @@ python typocompiler.py
 * **Java style**: error summaries, the classic scolding.
 * **C++ style**: character-precise, the classic roast.
 
-If the model returns `TC_OK`, congratulations. At least this time you fooled the AI.
+If the model returns `__TC_OK__`, congratulations. At least this time you fooled the AI.
 
 ---
 

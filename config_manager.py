@@ -31,7 +31,7 @@ class ConfigManager:
         self.ensure_loaded()
 
     def ensure_loaded(self) -> None:
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self._ensure_parent_dir()
         if not os.path.exists(self.path):
             self._config = deepcopy(DEFAULT_CONFIG)
             self.save()
@@ -40,16 +40,15 @@ class ConfigManager:
             with open(self.path, "r", encoding="utf-8") as f:
                 self._config = json.load(f)
         except Exception:
-            self._reset_notice = True
-            try:
-                backup = self.path + ".broken"
-                if os.path.exists(self.path):
-                    os.replace(self.path, backup)
-            except Exception:
-                pass
-            self._config = deepcopy(DEFAULT_CONFIG)
-            self.save()
-        if self._deep_merge_missing(self._config, DEFAULT_CONFIG):
+            self._reset_to_defaults(backup_broken=True)
+            return
+        if not isinstance(self._config, dict):
+            self._reset_to_defaults(backup_broken=True)
+            return
+        changed = self._deep_merge_missing(self._config, DEFAULT_CONFIG)
+        if self._normalize_schema():
+            changed = True
+        if changed:
             self.save()
 
     def _deep_merge_missing(self, target: Dict[str, Any], default: Dict[str, Any]) -> bool:
@@ -61,6 +60,128 @@ class ConfigManager:
             elif isinstance(v, dict) and isinstance(target[k], dict):
                 if self._deep_merge_missing(target[k], v):
                     changed = True
+        return changed
+
+    def _ensure_parent_dir(self) -> None:
+        parent = os.path.dirname(os.path.abspath(self.path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
+    def _reset_to_defaults(self, backup_broken: bool) -> None:
+        self._reset_notice = True
+        if backup_broken:
+            try:
+                backup = self.path + ".broken"
+                if os.path.exists(self.path):
+                    os.replace(self.path, backup)
+            except Exception:
+                pass
+        self._config = deepcopy(DEFAULT_CONFIG)
+        self.save()
+
+    @staticmethod
+    def _as_int(value, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _as_float(value, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _normalize_schema(self) -> bool:
+        changed = False
+        cfg = self._config
+
+        language = cfg.get("language")
+        if not isinstance(language, str) or not language:
+            cfg["language"] = DEFAULT_CONFIG["language"]
+            changed = True
+
+        default_style = cfg.get("default_style")
+        if not isinstance(default_style, str) or not default_style:
+            cfg["default_style"] = DEFAULT_CONFIG["default_style"]
+            changed = True
+
+        font_size_raw = cfg.get("font_size")
+        font_size = self._as_int(font_size_raw, DEFAULT_CONFIG["font_size"])
+        if font_size != font_size_raw:
+            cfg["font_size"] = font_size
+            changed = True
+
+        recent = cfg.get("recent_files")
+        if not isinstance(recent, list):
+            cfg["recent_files"] = []
+            changed = True
+        else:
+            normalized_recent = []
+            for p in recent:
+                if isinstance(p, str) and p:
+                    normalized_recent.append(p)
+            normalized_recent = normalized_recent[:10]
+            if normalized_recent != recent:
+                cfg["recent_files"] = normalized_recent
+                changed = True
+
+        styles = cfg.get("styles")
+        if not isinstance(styles, dict):
+            cfg["styles"] = {}
+            changed = True
+        else:
+            normalized_styles = {}
+            for k, v in styles.items():
+                if isinstance(k, str) and isinstance(v, str):
+                    normalized_styles[k] = v
+                else:
+                    changed = True
+            if normalized_styles != styles:
+                cfg["styles"] = normalized_styles
+                changed = True
+
+        llm = cfg.get("llm")
+        if not isinstance(llm, dict):
+            cfg["llm"] = deepcopy(DEFAULT_CONFIG["llm"])
+            return True
+
+        for key in ("base_url", "model", "api_key"):
+            value = llm.get(key)
+            if not isinstance(value, str):
+                llm[key] = DEFAULT_CONFIG["llm"][key]
+                changed = True
+
+        auth = llm.get("auth")
+        if not isinstance(auth, dict):
+            llm["auth"] = deepcopy(DEFAULT_CONFIG["llm"]["auth"])
+            auth = llm["auth"]
+            changed = True
+        for key in ("header_name", "prefix"):
+            value = auth.get(key)
+            if not isinstance(value, str):
+                auth[key] = DEFAULT_CONFIG["llm"]["auth"][key]
+                changed = True
+
+        temp_raw = llm.get("temperature")
+        temp = self._as_float(temp_raw, DEFAULT_CONFIG["llm"]["temperature"])
+        if temp != temp_raw:
+            llm["temperature"] = temp
+            changed = True
+
+        max_tokens_raw = llm.get("max_tokens")
+        max_tokens = self._as_int(max_tokens_raw, DEFAULT_CONFIG["llm"]["max_tokens"])
+        if max_tokens != max_tokens_raw:
+            llm["max_tokens"] = max_tokens
+            changed = True
+
+        timeout_raw = llm.get("timeout_seconds")
+        timeout = self._as_int(timeout_raw, DEFAULT_CONFIG["llm"]["timeout_seconds"])
+        if timeout != timeout_raw:
+            llm["timeout_seconds"] = timeout
+            changed = True
+
         return changed
 
     def get(self, key: str, default=None):
@@ -90,7 +211,10 @@ class ConfigManager:
 
     def add_recent_file(self, path: str) -> None:
         lst = self._config.get("recent_files", [])
-        if path in lst:
+        if not isinstance(lst, list):
+            lst = []
+        path = str(path)
+        while path in lst:
             lst.remove(path)
         lst.insert(0, path)
         self._config["recent_files"] = lst[:10]
@@ -103,5 +227,6 @@ class ConfigManager:
         return False
 
     def save(self) -> None:
+        self._ensure_parent_dir()
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(self._config, f, ensure_ascii=False, indent=2)

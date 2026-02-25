@@ -633,7 +633,7 @@ class StylesDialog(tk.Toplevel):
     def on_add(self):
         self.name_var.set("NewStyle")
         self.template.delete("1.0","end")
-        self.template.insert("1.0", "STRICT compiler-style diagnostics for ENGLISH text; success => __TC_OK__.\nINPUT:\n{input_text}")
+        self.template.insert("1.0", "STRICT compiler-style diagnostics for ENGLISH text; success => __TC_OK__\nINPUT:\n{input_text}")
 
     def on_edit(self):
         name = self._selected_name()
@@ -650,6 +650,8 @@ class StylesDialog(tk.Toplevel):
         if not name: return
         if name in BUILTIN_STYLES:
             data = self.cfg.get("styles", {}) or {}
+            if not isinstance(data, dict):
+                data = {}
             if name in data:
                 del data[name]; self.cfg.set("styles", data)
         else:

@@ -52,7 +52,7 @@ python typocompiler.py
 * **Estilo Java**: resumen de errores, la regañina clásica.
 * **Estilo C++**: precisión al carácter, la crítica clásica.
 
-Si el modelo devuelve `TC_OK`, enhorabuena. Al menos esta vez engañaste a la IA.
+Si el modelo devuelve `__TC_OK__`, enhorabuena. Al menos esta vez engañaste a la IA.
 
 ---
 

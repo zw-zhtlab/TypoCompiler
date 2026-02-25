@@ -62,10 +62,20 @@ class StyleManager:
         self.cfg = cfg
         self.reload()
 
+    @staticmethod
+    def _sanitize_styles(data) -> Dict[str, str]:
+        if not isinstance(data, dict):
+            return {}
+        clean: Dict[str, str] = {}
+        for k, v in data.items():
+            if isinstance(k, str) and isinstance(v, str):
+                clean[k] = v
+        return clean
+
     def reload(self) -> None:
         """Reload styles from built-ins plus user overrides."""
         self._styles = BUILTIN_STYLES.copy()
-        user_styles = self.cfg.get("styles", {}) or {}
+        user_styles = self._sanitize_styles(self.cfg.get("styles", {}) or {})
         self._styles.update(user_styles)
 
     @property
@@ -77,12 +87,12 @@ class StyleManager:
 
     def set(self, name: str, template: str) -> None:
         self._styles[name] = template
-        data = self.cfg.get("styles", {}) or {}
+        data = self._sanitize_styles(self.cfg.get("styles", {}) or {})
         data[name] = template
         self.cfg.set("styles", data)
 
     def delete(self, name: str) -> None:
-        data = self.cfg.get("styles", {}) or {}
+        data = self._sanitize_styles(self.cfg.get("styles", {}) or {})
         if name in data:
             del data[name]
             self.cfg.set("styles", data)
