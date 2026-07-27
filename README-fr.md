@@ -1,89 +1,55 @@
-# TypoCompiler : quand tu exécutes la langue comme du code
+# TypoCompiler
 
-**语言 / Languages / 言語 / 언어 / Idiomas / Sprachen / Langues**：  
-[简体中文](./README.md) · [English](./README-en.md) · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · [Deutsch](./README-de.md) · [Français](./README-fr.md)
+**Langues :** [简体中文](./README.md) · [English](./README-en.md) · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · [Deutsch](./README-de.md) · **Français**
 
+TypoCompiler est un client de bureau qui présente les problèmes de langue naturelle comme des diagnostics de compilateur. L’éditeur, la liste des diagnostics liés au texte et la sortie en lecture seule de style Python, Java ou C++ partagent une seule fenêtre. Le modèle détecte la langue d’entrée, mais la qualité dépend du modèle configuré et aucun résultat exhaustif n’est garanti.
 
-> Les gens ne sont pas des analyseurs syntaxiques. Ils n’arrêtent pas l’exécution juste parce que ta grammaire est mauvaise. J’ai donc construit un vrai parseur.
+## Fonctionnalités
 
-Tu t’es déjà demandé si, quand tu parles une langue étrangère bancale, le sourire en face ne cachait pas une pile « d’erreurs de compilation » ? Maintenant tu peux compiler tes conversations quotidiennes comme des programmes.
+- Le LLM produit uniquement des diagnostics JSON structurés ; les lignes, colonnes et niveaux sont validés localement.
+- Un seul ensemble canonical de diagnostics alimente les rendus déterministes Python, Java et C++.
+- Un double-clic rejoint la position source ; un résultat lié à une version antérieure du texte est signalé comme périmé.
+- Le BOM UTF-8 et les fins de ligne sont préservés ; la configuration et les documents sont enregistrés de façon atomique.
+- Les tâches d’arrière-plan remettent leurs données au thread principal Tk par une file ; les anciens résultats et ceux reçus après fermeture sont ignorés.
 
-TypoCompiler utilise des styles de compilateur classiques pour repérer les erreurs de langue dans le texte, aussi impitoyable que Python, Java et C++.
+## Prérequis et lancement
 
-Plus besoin de craindre que ce sourire gêné appelle `exit(1)` en douce.
+- Python 3.10 ou version ultérieure
+- Tkinter (généralement inclus sous Windows et macOS ; sous Linux, `python3-tk` peut être nécessaire)
+- Un endpoint et un modèle compatibles avec OpenAI Chat Completions
 
----
-
-✨ **Fonctionnalités**
-
-* **Diagnostics façon compilateur** : grognon comme Python, strict comme Java, rigide comme C++. La douleur dont se souviennent les développeurs.
-* **Détection multilingue automatique** : quelle que soit la langue où tu te trompes, TypoCompiler le signale avec précision.
-* **Interface classique** : assez simple pour un PM, assez puissante pour donner envie aux ingénieurs.
-* **Intégration LLM** : interface compatible OpenAI. Trouve les erreurs efficacement et dépense tout aussi efficacement ton quota d’API.
-* **Styles personnalisables** : ta langue, tes règles. Même les styles de relecture internes sont faciles à adapter.
-
----
-
-🧭 **Démarrage rapide**
-
-**Prérequis** : Python 3.8+. Pas d’autres dépendances, parce que moi aussi je suis paresseux.
+Aucune dépendance Python d’exécution supplémentaire n’est requise.
 
 ```bash
 python typocompiler.py
+python -m typocompiler
+
+# Commande graphique installée
+python -m pip install .
+typocompiler
 ```
 
-1. Ouvre l’éditeur et écris ton texte en langue étrangère « brillant ».
-2. Configure ton LLM pour que l’IA partage ta souffrance linguistique.
-3. Clique sur **Run** pour que le compilateur relève tes erreurs sans pitié.
+Configurez le serveur et le modèle dans **Paramètres → LLM**, puis lancez l’analyse avec `F5`. `Esc` invalide le résultat actif, sans garantir l’arrêt d’un appel HTTP déjà envoyé.
 
----
+## Sécurité, confidentialité et configuration
 
-🖥️ **Guide des menus**
+- Chaque analyse envoie le texte courant et les consignes de relecture au fournisseur configuré. N’envoyez un document sensible qu’à un service de confiance.
+- Un serveur distant doit utiliser HTTPS. HTTP en clair est limité à `localhost`, `127.0.0.1` et `::1` ; les redirections sont désactivées.
+- Le choix `TYPOCOMPILER_API_KEY` évite tout stockage local de la clé. Le stockage local écrit la clé en texte brut dans `~/.typocompiler/config.json`.
+- Une configuration endommagée est déplacée vers un fichier unique `config.json.broken-*`, sans écraser volontairement les preuves précédentes et avec des droits réservés au propriétaire lorsque possible.
+- Chaque texte UTF-8 envoyé à l’analyse est limité à 2 MiB ; les réponses normales et d’erreur sont aussi bornées et soumises à un délai total. Le champ de jetons peut être `max_tokens` pour la compatibilité ou `max_completion_tokens` pour les services et modèles qui l’exigent.
 
-* **Fichier** : les classiques.
-* **Paramètres** : changer la langue et les styles. L’humeur, c’est pour ta pomme.
-* **Exécuter** : exécuter en un clic, planter en un clic, copier les erreurs en un clic.
+## Diagnostics et profils personnalisés
 
----
+Les réponses vides, refusées, tronquées, au JSON invalide ou aux positions hors texte sont rejetées en mode fail closed. Les seuls champs autorisés dans une consigne sont `{input_text}` et `{style_name}`. Les accès aux attributs ou index, les champs inconnus et les accolades incomplètes sont rejetés avant l’enregistrement. Changer le style réaffiche localement les mêmes diagnostics sans relancer ni modifier l’analyse.
 
-🧠 **Styles intégrés**
+## Développement
 
-* **Style Python** : Traceback, la claque classique.
-* **Style Java** : résumé d’erreurs, la remontrance classique.
-* **Style C++** : précision au caractère, la petite pique classique.
+```bash
+python -m pip install -e ".[dev]"
+ruff check .
+ruff format --check .
+python -m pip wheel . --no-deps -w dist-test
+```
 
-Si le modèle renvoie `__TC_OK__`, bravo. Au moins cette fois tu as dupé l’IA.
-
----
-
-🧩 **Personnalisation des styles**
-
-Tu n’aimes pas les valeurs par défaut ? Dans **Paramètres → Gérer les styles**, crée tes propres modèles pour que TypoCompiler atteigne ton ego encore plus précisément.
-
----
-
-⚙️ **Configuration et restauration**
-
-Configuration cassée ? Pas de souci. L’application revient aux paramètres par défaut et sauvegarde celle qui est cassée.
-
----
-
-🌐 **Confidentialité et sécurité**
-
-À chaque clic sur **Run**, tes erreurs sont envoyées au serveur LLM configuré. Ne t’inquiète pas, elles sont en sécurité tant que ta clé API a du crédit.
-
----
-
-🗂️ **Pour les développeurs**
-
-Tu veux creuser ? L’arborescence est prête. Bidouille à volonté.
-
----
-
-❗ **Dernier rappel**
-
-Tu crois que les gens sont indulgents quand tu parles de travers ? Peut-être que leur « compilateur de langue » ne s’est tout simplement pas écrasé.
-
-Maintenant, il y a TypoCompiler.
-
-Happy “Coding”!
+La CI exécute Ruff, le formatage, la construction du wheel et un contrôle d’import. Licence [MIT](./LICENSE).
