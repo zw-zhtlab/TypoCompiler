@@ -1,89 +1,83 @@
-# TypoCompiler: When you run language like code
+# TypoCompiler
 
-**语言 / Languages / 言語 / 언어 / Idiomas / Sprachen / Langues**：  
-[简体中文](./README.md) · [English](./README-en.md) · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · [Deutsch](./README-de.md) · [Français](./README-fr.md)
+**Languages:** [简体中文](./README.md) · **English** · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · [Deutsch](./README-de.md) · [Français](./README-fr.md)
 
+TypoCompiler is a small desktop writing-review client that presents language issues like compiler diagnostics. You edit text, run one LLM analysis, inspect source-bound issues, and view Python-, Java-, or C++-style output in the same window.
 
-> People aren’t syntax parsers. They don’t stop execution just because your grammar is wrong. So I built a real parser.
+## What changed in 2.1
 
-Have you ever wondered whether, when you speak in broken foreign languages, the smile on the other person’s face hides a pile of “compile errors”? Now you can finally compile everyday conversations as if they were programs!
+- A single-window workspace replaces the extra run window.
+- The editor, diagnostic list, and read-only compiler output are visible together.
+- Double-clicking a diagnostic moves the caret to its source location; severity is shown as text as well as highlighting.
+- Scrollbars, keyboard navigation, focusable controls, cursor position, stale-result notices, and run cancellation improve accessibility and clarity.
+- The model returns structured JSON. TypoCompiler validates every line and column, then renders compiler output locally.
+- Opened files retain their detected UTF-8 BOM and newline convention and are saved atomically.
+- Worker threads return data through a main-thread queue; stale or post-close results cannot touch Tk or replace a newer run.
+- Remote endpoints require HTTPS. Plain HTTP is accepted only for `localhost`, `127.0.0.1`, and `::1`.
+- Packaging metadata and automated quality/package CI are included.
 
-TypoCompiler uses classic compiler styles to pinpoint language issues in text, as strict as Python, Java, and C++.
+## Requirements and launch
 
-No more worrying that the awkward smile is secretly calling `exit(1)`.
+- Python 3.10 or newer
+- Tkinter (included with the standard Windows and macOS Python installers; some Linux distributions package it as `python3-tk`)
+- An OpenAI-compatible chat-completions endpoint and model
 
----
-
-✨ **Features**
-
-* **Compiler-style diagnostics**: cranky like Python, strict like Java, stiff like C++. The kind of pain programmers remember.
-* **Multilingual auto detection**: whatever language you mess up in, TypoCompiler calls it out precisely.
-* **Classic UI**: simple enough for PMs to use, powerful enough that engineers want it.
-* **LLM integration**: an OpenAI-compatible interface that finds mistakes efficiently and spends your API quota efficiently, too.
-* **Custom styles**: your language, your rules. Even in-house review styles are easy to adapt.
-
----
-
-🧭 **Quick start**
-
-**Requirements**: Python 3.8+. No other dependencies, because I’m lazy too.
+There are no third-party runtime Python dependencies.
 
 ```bash
 python typocompiler.py
+# equivalent module entry
+python -m typocompiler
 ```
 
-1. Open the editor and write your “brilliant” foreign-language text.
-2. Configure your LLM so the AI can suffer your awkward phrasing with you.
-3. Click **Run** to let the compiler point out your mistakes, hard.
+Or install the local command:
 
----
+```bash
+python -m pip install .
+typocompiler
+```
 
-🖥️ **Menu guide**
+The installed `typocompiler` entry is a GUI script, so Windows does not open an extra console. Open **Settings → LLM Settings**, enter the base URL, model, and optional credential, then use **F5** to analyze the editor text. The configured base URL is extended with `/chat/completions`.
 
-* **File**: the usual things you know.
-* **Settings**: switch language, choose styles, adjust your mindset (the last part is on you).
-* **Run**: run once, crash once, copy errors with one click.
+## Keyboard workflow
 
----
+| Action | Shortcut |
+| --- | --- |
+| New / Open / Save | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` |
+| Save As | `Ctrl+Shift+S` |
+| Run analysis | `F5` |
+| Cancel or disregard the active run | `Esc` |
+| Copy compiler output | `Ctrl+Shift+C` |
+| Increase / decrease / reset font | `Ctrl++` / `Ctrl+-` / `Ctrl+0` |
 
-🧠 **Built-in diagnostic styles**
+Cancelling cannot terminate an HTTP call already in progress, but its eventual response is ignored. If the text changes during a run, results remain visible and are clearly marked as belonging to an earlier snapshot.
 
-* **Python style**: Traceback, the classic slap in the face.
-* **Java style**: error summaries, the classic scolding.
-* **C++ style**: character-precise, the classic roast.
+## Diagnostics and profiles
 
-If the model returns `__TC_OK__`, congratulations. At least this time you fooled the AI.
+The model identifies the input language and returns a JSON diagnostic list. Each item must contain a valid source line, start/end column, severity, category, and message; original text, replacement, and explanation are optional. Invalid or out-of-range responses are rejected instead of being displayed as trustworthy output.
 
----
+Python, Java, and C++ are presentation styles applied locally to the same validated result. **Settings → Manage Styles** changes review guidance; it does not execute code or install a compiler. Results still depend on the configured model and are not guaranteed to find every language issue.
 
-🧩 **Style customization**
+Custom guidance accepts only the inert placeholders `{input_text}` and `{style_name}`. Empty or malformed templates, unknown fields, attribute access, indexing, conversions, and format specifications are rejected before persistence. Analysis always produces one canonical diagnostic set; changing the display style only re-renders that set locally.
 
-Don’t like the defaults? In **Settings → Manage Styles**, craft your own templates so TypoCompiler can hit your ego even more precisely.
+## Files, privacy, and configuration
 
----
+- Text and Markdown files up to 16 MiB can be opened; one UTF-8 analysis payload is limited to 2 MiB to bound UI work and provider cost.
+- Each analysis sends the current text and review guidance to the configured provider. Do not submit sensitive text unless that provider is appropriate for it.
+- The settings dialog explicitly chooses between `TYPOCOMPILER_API_KEY` (no local key) and local plain-text storage in `~/.typocompiler/config.json`. Prefer a scoped token and the environment option.
+- A malformed configuration is moved to a unique, best-effort owner-only `config.json.broken-*` backup before defaults are written. Existing backups are never deliberately overwritten.
+- Remote HTTP URLs, URL credentials, query strings, fragments, whitespace, and control characters are rejected. Redirects are disabled, response/error bodies are bounded, and response reading observes a total deadline.
+- The output-token field is selectable: `max_tokens` remains the compatibility default, while `max_completion_tokens` is available for providers and models that require it.
 
-⚙️ **Config and recovery**
+## Development
 
-Broke the config? No problem. The app resets to defaults and backs up the broken one for you.
+```bash
+python -m pip install -e ".[dev]"
+ruff check .
+ruff format --check .
+python -m pip wheel . --no-deps -w dist-test
+```
 
----
+GitHub Actions runs Ruff, formatting, wheel construction, and an import smoke check.
 
-🌐 **Privacy and security**
-
-Every time you click **Run**, your language mistakes are sent to the configured LLM server. Don’t worry, your mistakes are safe—as long as your API key still has credit.
-
----
-
-🗂️ **For developers**
-
-Want to dig deeper? The directory structure is ready. Tinker as you like.
-
----
-
-❗ **One last reminder**
-
-You think people are tolerant when you misspeak? Maybe their “language compiler” just didn’t crash.
-
-Now we have TypoCompiler.
-
-Happy “Coding”!
+Licensed under the [MIT License](./LICENSE).

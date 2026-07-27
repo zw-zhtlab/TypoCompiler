@@ -1,89 +1,55 @@
-# TypoCompiler: Wenn du Sprache wie Code ausführst
+# TypoCompiler
 
-**语言 / Languages / 言語 / 언어 / Idiomas / Sprachen / Langues**：  
-[简体中文](./README.md) · [English](./README-en.md) · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · [Deutsch](./README-de.md) · [Français](./README-fr.md)
+**Sprachen:** [简体中文](./README.md) · [English](./README-en.md) · [日本語](./README-ja.md) · [한국어](./README-ko.md) · [Español](./README-es.md) · **Deutsch** · [Français](./README-fr.md)
 
+TypoCompiler ist ein Desktop-Client, der Probleme in natürlicher Sprache wie Compilerdiagnosen darstellt. Editor, Diagnoseliste mit Quellpositionen und schreibgeschützte Ausgabe im Python-, Java- oder C++-Stil befinden sich in einem Fenster. Das Modell erkennt die Eingabesprache; die Qualität hängt jedoch vom konfigurierten Modell ab und eine vollständige Fehlererkennung ist nicht garantiert.
 
-> Menschen sind keine Syntax-Parser. Sie beenden die Ausführung nicht nur wegen schlechter Grammatik. Also habe ich einen echten Parser gebaut.
+## Funktionen
 
-Hast du dich schon einmal gefragt, ob hinter dem Lächeln deines Gegenübers eine Menge „Kompilierfehler“ steckt, wenn du in holpriger Fremdsprache sprichst? Jetzt kannst du Alltagsgespräche endlich wie Programme kompilieren.
+- Das LLM liefert ausschließlich strukturierte JSON-Diagnosen; Zeilen, Spalten und Schweregrade werden lokal geprüft.
+- Ein einziger canonical Diagnosesatz speist die deterministischen Python-, Java- und C++-Renderer.
+- Ein Doppelklick springt zur Fundstelle; Ergebnisse für einen älteren Textstand werden als veraltet markiert.
+- UTF-8-BOM und Zeilenenden bleiben erhalten, Konfiguration und Dokumente werden atomar gespeichert.
+- Hintergrundaufgaben liefern Daten über eine Queue an den Tk-Hauptthread; alte Ergebnisse und Rückgaben nach dem Schließen werden ignoriert.
 
-TypoCompiler nutzt klassische Compiler-Stile, um Sprachfehler im Text aufzuspüren – so unerbittlich wie Python, Java und C++.
+## Voraussetzungen und Start
 
-Du musst dich nicht mehr fragen, ob das verlegene Lächeln heimlich `exit(1)` aufruft.
+- Python 3.10 oder neuer
+- Tkinter (unter Windows und macOS üblicherweise enthalten; unter Linux eventuell `python3-tk`)
+- Ein OpenAI-Chat-Completions-kompatibler Endpunkt und ein Modell
 
----
-
-✨ **Funktionen**
-
-* **Diagnosen im Compiler-Stil**: launisch wie Python, streng wie Java, steif wie C++. Der Schmerz, den Programmierer kennen.
-* **Mehrsprachige automatische Erkennung**: egal in welcher Sprache du patzt, TypoCompiler markiert es präzise.
-* **Klassische Oberfläche**: so einfach, dass ein PM sie nutzen kann, so mächtig, dass Entwickler sie haben wollen.
-* **LLM-Integration**: OpenAI-kompatible Schnittstelle. Findet Fehler effizient und verbraucht deine API-Quota ebenso effizient.
-* **Anpassbare Stile**: deine Sprache, deine Regeln. Auch interne Review-Stile sind leicht anzupassen.
-
----
-
-🧭 **Schnellstart**
-
-**Voraussetzungen**: Python 3.8+. Keine weiteren Abhängigkeiten – ich bin schließlich auch bequem.
+Es gibt keine zusätzlichen Python-Laufzeitabhängigkeiten.
 
 ```bash
 python typocompiler.py
+python -m typocompiler
+
+# Installierter GUI-Befehl
+python -m pip install .
+typocompiler
 ```
 
-1. Öffne den Editor und schreibe deinen „brillanten“ Fremdsprachen-Text.
-2. Konfiguriere dein LLM, damit die KI dein Gestammel mit dir erträgt.
-3. Klicke auf **Run**, damit der Compiler deine Fehler gnadenlos aufzeigt.
+Server und Modell werden unter **Einstellungen → LLM-Einstellungen** gesetzt; `F5` startet die Analyse. `Esc` verwirft das aktive Ergebnis, kann aber einen bereits gesendeten HTTP-Aufruf nicht zwingend beenden.
 
----
+## Sicherheit, Datenschutz und Konfiguration
 
-🖥️ **Menü-Übersicht**
+- Jede Analyse sendet den aktuellen Text und die Prüfanweisung an den konfigurierten Anbieter. Vertrauliche Texte gehören nur zu einem vertrauenswürdigen Dienst.
+- Entfernte Endpunkte müssen HTTPS verwenden. Unverschlüsseltes HTTP ist nur für `localhost`, `127.0.0.1` und `::1` zulässig; Weiterleitungen sind deaktiviert.
+- Bei Auswahl von `TYPOCOMPILER_API_KEY` wird kein Schlüssel lokal gespeichert. Lokale Speicherung schreibt ihn als Klartext nach `~/.typocompiler/config.json`.
+- Eine beschädigte Konfiguration wird in eine eindeutige Datei `config.json.broken-*` verschoben, ohne ältere Belege absichtlich zu überschreiben; soweit möglich gelten nur Besitzerrechte.
+- Ein UTF-8-Analysetext ist auf 2 MiB begrenzt; normale und Fehlerantworten sind ebenfalls größenbegrenzt und unterliegen einer Gesamtfrist. Als Token-Feld stehen das kompatible `max_tokens` und das neuere `max_completion_tokens` zur Auswahl.
 
-* **Datei**: die üblichen Dinge.
-* **Einstellungen**: Sprache und Stile umschalten. Die Einstellung deiner Stimmung liegt bei dir.
-* **Ausführen**: mit einem Klick ausführen, mit einem Klick scheitern, mit einem Klick Fehler kopieren.
+## Diagnosen und eigene Profile
 
----
+Leere, verweigerte oder abgeschnittene Antworten, ungültiges JSON und Positionen außerhalb des Textes werden nach dem Fail-Closed-Prinzip abgelehnt. Eigene Anweisungen dürfen nur `{input_text}` und `{style_name}` verwenden. Attribut- oder Indexzugriffe, unbekannte Felder und unvollständige Klammern werden vor dem Speichern abgewiesen. Ein anderer Anzeigestil rendert denselben Diagnosesatz nur lokal neu.
 
-🧠 **Eingebaute Stile**
+## Entwicklung
 
-* **Python-Stil**: Traceback – die klassische Ohrfeige.
-* **Java-Stil**: Fehlerzusammenfassung – die klassische Standpauke.
-* **C++-Stil**: Genauigkeit bis zum Zeichen – der klassische Seitenhieb.
+```bash
+python -m pip install -e ".[dev]"
+ruff check .
+ruff format --check .
+python -m pip wheel . --no-deps -w dist-test
+```
 
-Gibt das Modell `__TC_OK__` zurück, Glückwunsch. Zumindest diesmal hast du die KI ausgetrickst.
-
----
-
-🧩 **Stile anpassen**
-
-Dir gefallen die Defaults nicht? In **Einstellungen → Stile verwalten** kannst du eigene Templates bauen, damit TypoCompiler dein Ego noch gezielter trifft.
-
----
-
-⚙️ **Konfiguration und Wiederherstellung**
-
-Konfiguration zerschossen? Kein Problem. Die App setzt auf Standardwerte zurück und sichert die kaputte Datei.
-
----
-
-🌐 **Datenschutz und Sicherheit**
-
-Bei jedem Klick auf **Run** werden deine Sprachfehler an den konfigurierten LLM-Server gesendet. Keine Sorge: sicher sind sie – solange dein API-Schlüssel noch Guthaben hat.
-
----
-
-🗂️ **Für Entwickler**
-
-Du willst tiefer einsteigen? Die Projektstruktur ist bereit. Viel Spaß beim Basteln.
-
----
-
-❗ **Letzte Erinnerung**
-
-Du glaubst, Menschen sind tolerant, wenn du dich versprichst? Vielleicht ist ihr „Sprach-Compiler“ nur noch nicht abgestürzt.
-
-Jetzt haben wir TypoCompiler.
-
-Happy „Coding“!
+Die CI prüft Ruff, Formatierung, Wheel-Build und Import. Lizenz: [MIT](./LICENSE).

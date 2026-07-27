@@ -1,61 +1,67 @@
+"""Built-in review profiles and user-defined analysis guidance."""
 
-# styles.py
+from __future__ import annotations
+
+import string
 from typing import Dict, List
+
 from config_manager import ConfigManager
 
-SUCCESS_SENTINEL = "__TC_OK__"
+ALLOWED_TEMPLATE_FIELDS = frozenset({"input_text", "style_name"})
+MAX_GUIDANCE_CHARS = 32_000
 
-# Escape braces for examples with {{LIKE_THIS}} to avoid Python .format collisions.
+DEFAULT_REVIEW_GUIDANCE = (
+    "Review the text in its own detected language. Report clear spelling, grammar, "
+    "word-choice, punctuation, capitalization, agreement, and malformed quote or "
+    "bracket issues. Do not rewrite for personal style."
+)
+
+# A profile controls both local presentation and optional model guidance. Compiler
+# formatting is generated locally from validated diagnostics, not trusted to the model.
 BUILTIN_STYLES: Dict[str, str] = {
-    "Python": (
-        "You are a STRICT formatter that mimics CPython 3.11 interpreter diagnostics "
-        "for ENGLISH NATURAL-LANGUAGE TEXT (not code).\n"
-        f"SUCCESS CASE: If NO issues are found, reply with EXACTLY {SUCCESS_SENTINEL} and NOTHING ELSE.\n"
-        "SCOPE of issues to flag as 'syntax': common misspellings; doubled/omitted words; missing terminal punctuation; "
-        "comma splices/run-ons; subject–verb disagreement; inconsistent casing; malformed or mismatched quotes/brackets.\n"
-        "OUTPUT CONTRACT:\n"
-        " - Plain text only. NO markdown, NO code fences, NO explanations, NO suggestions.\n"
-        " - For each issue (you may aggregate closely related ones), emit a CPython-like block:\n"
-        "   Traceback (most recent call last):\\n"
-        "     File \"<stdin>\", line {{LINE}}\\n"
-        "       {{SNIPPET}}\\n"
-        "       {{CARET}}\\n"
-        "   SyntaxError: {{SHORT_MESSAGE}}\n"
-        " - Use realistic line numbers from the input (1-based). Place the caret under the first offending token.\n"
-        " - Keep {{SHORT_MESSAGE}} concise (<= 80 chars). Emit at most 8 blocks.\n"
-        " - Do NOT add any extra lines before/after blocks.\n\n"
-        "INPUT (<stdin>):\n{input_text}"
-    ),
-    "Java": (
-        "You are a STRICT formatter that mimics javac (Java 17) diagnostics for ENGLISH NATURAL-LANGUAGE TEXT (not code).\n"
-        f"SUCCESS CASE: If NO issues are found, reply with EXACTLY {SUCCESS_SENTINEL} and NOTHING ELSE.\n"
-        "Treat each input line as a source line. Flag NL issues as syntax/lexical errors.\n"
-        "OUTPUT CONTRACT:\n"
-        " - Plain text only. NO markdown, NO explanations.\n"
-        " - Emit concise diagnostics like:\n"
-        "   Main.java:{{LINE}}: error: {{SHORT_MESSAGE}}\\n"
-        "       {{SNIPPET}}\\n"
-        "              ^\\n"
-        "   {{OPTIONAL_NOTE}}\n"
-        " - After all diagnostics, print a summary line: '1 error' or '{{N}} errors'.\n"
-        " - Keep messages terse (<= 80 chars). Emit at most 8 errors.\n\n"
-        "INPUT (Main.java):\n{input_text}"
-    ),
-    "C++": (
-        "You are a STRICT formatter that mimics clang++/g++ (C++17) diagnostics for ENGLISH NATURAL-LANGUAGE TEXT (not code).\n"
-        f"SUCCESS CASE: If NO issues are found, reply with EXACTLY {SUCCESS_SENTINEL} and NOTHING ELSE.\n"
-        "Treat each input line as if it were source. Map NL issues to syntax/lexical errors.\n"
-        "OUTPUT CONTRACT:\n"
-        " - Plain text only. NO markdown, NO explanations.\n"
-        " - Emit diagnostics like:\n"
-        "   main.cpp:{{LINE}}:{{COLUMN}}: error: {{SHORT_MESSAGE}}\\n"
-        "   {{SNIPPET}}\\n"
-        "           ^\n"
-        " - Finish with '1 error generated.' or '{{N}} errors generated.'\n"
-        " - Choose COLUMN as the first character index (1-based) of the offending token. Max 8 errors; each message <= 80 chars.\n\n"
-        "INPUT (main.cpp):\n{input_text}"
-    ),
+    "Python": DEFAULT_REVIEW_GUIDANCE,
+    "Java": DEFAULT_REVIEW_GUIDANCE,
+    "C++": DEFAULT_REVIEW_GUIDANCE,
 }
+
+
+def validate_guidance_template(template: str) -> str:
+    """Validate a profile without permitting Python attribute/index traversal."""
+
+    if not isinstance(template, str) or not template.strip():
+        raise ValueError("Profile guidance cannot be empty")
+    if len(template) > MAX_GUIDANCE_CHARS:
+        raise ValueError(
+            f"Profile guidance cannot exceed {MAX_GUIDANCE_CHARS} characters"
+        )
+    try:
+        parsed = tuple(string.Formatter().parse(template))
+    except ValueError as error:
+        raise ValueError(f"Invalid profile template: {error}") from error
+    for _literal, field_name, format_spec, conversion in parsed:
+        if field_name is None:
+            continue
+        if field_name not in ALLOWED_TEMPLATE_FIELDS:
+            allowed = ", ".join(sorted(ALLOWED_TEMPLATE_FIELDS))
+            raise ValueError(
+                f"Unsupported profile placeholder {field_name!r}; allowed: {allowed}"
+            )
+        if conversion is not None or format_spec:
+            raise ValueError("Profile placeholders cannot use conversions or formats")
+    return template
+
+
+def render_guidance_template(template: str, *, input_text: str, style_name: str) -> str:
+    """Render an already constrained guidance template with inert placeholder data."""
+
+    validate_guidance_template(template)
+    return template.format_map(
+        {
+            "input_text": input_text,
+            "style_name": style_name,
+        }
+    )
+
 
 class StyleManager:
     def __init__(self, cfg: ConfigManager) -> None:
@@ -63,40 +69,61 @@ class StyleManager:
         self.reload()
 
     @staticmethod
-    def _sanitize_styles(data) -> Dict[str, str]:
+    def _sanitize_styles(data: object) -> Dict[str, str]:
         if not isinstance(data, dict):
             return {}
-        clean: Dict[str, str] = {}
-        for k, v in data.items():
-            if isinstance(k, str) and isinstance(v, str):
-                clean[k] = v
-        return clean
+        sanitized: Dict[str, str] = {}
+        for key, value in data.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            clean_name = key.strip()
+            if (
+                not clean_name
+                or len(clean_name) > 100
+                or any(
+                    ord(character) < 32 or ord(character) == 127
+                    for character in clean_name
+                )
+            ):
+                continue
+            try:
+                validate_guidance_template(value)
+            except ValueError:
+                continue
+            sanitized[clean_name] = value
+        return sanitized
 
     def reload(self) -> None:
-        """Reload styles from built-ins plus user overrides."""
+        """Reload profiles from built-ins plus user overrides."""
+
         self._styles = BUILTIN_STYLES.copy()
-        user_styles = self._sanitize_styles(self.cfg.get("styles", {}) or {})
-        self._styles.update(user_styles)
+        self._styles.update(self._sanitize_styles(self.cfg.get("styles", {}) or {}))
 
     @property
     def names(self) -> List[str]:
-        return sorted(self._styles.keys())
+        return sorted(self._styles)
 
     def get(self, name: str) -> str:
         return self._styles.get(name, "")
 
     def set(self, name: str, template: str) -> None:
-        self._styles[name] = template
+        clean_name = name.strip()
+        if not clean_name:
+            raise ValueError("Profile name cannot be empty")
+        if len(clean_name) > 100:
+            raise ValueError("Profile name cannot exceed 100 characters")
+        if any(
+            ord(character) < 32 or ord(character) == 127 for character in clean_name
+        ):
+            raise ValueError("Profile name cannot contain control characters")
+        validate_guidance_template(template)
         data = self._sanitize_styles(self.cfg.get("styles", {}) or {})
-        data[name] = template
+        data[clean_name] = template
         self.cfg.set("styles", data)
+        self.reload()
 
     def delete(self, name: str) -> None:
         data = self._sanitize_styles(self.cfg.get("styles", {}) or {})
-        if name in data:
-            del data[name]
-            self.cfg.set("styles", data)
-        if name not in BUILTIN_STYLES and name in self._styles:
-            del self._styles[name]
-        # Reload to restore built-ins and apply remaining overrides.
+        data.pop(name, None)
+        self.cfg.set("styles", data)
         self.reload()

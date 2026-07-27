@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "typocompiler"
+version = "2.1.0"
+description = "A desktop language-review workspace with compiler-style diagnostics"
+readme = "README-en.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "TypoCompiler contributors" }]
+keywords = ["writing", "diagnostics", "tkinter", "llm"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Win32 (MS Windows)",
+  "Environment :: X11 Applications",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Text Processing :: Linguistic",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.gui-scripts]
+typocompiler = "typocompiler:main"
+
+[project.urls]
+Repository = "https://github.com/zw-zhtlab/TypoCompiler"
+
+[tool.setuptools]
+py-modules = [
+  "config_manager",
+  "diagnostics",
+  "file_ops",
+  "i18n",
+  "llm_client",
+  "styles",
+  "typocompiler",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = ["E501"]
